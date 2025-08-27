@@ -12,11 +12,8 @@ import {
 import React from 'react';
 import type { Project, Task, Participant, Role, Client, Lead, CompanyInfo, ProjectTemplate, TemplateTask, ChecklistItem, Workspace } from '@/lib/types';
 import {
-  initialProjects,
-  initialTasks,
   initialParticipants,
   initialRoles,
-  initialClients,
   initialLeads,
   initialCompanyInfo,
   initialProjectTemplates,
@@ -71,11 +68,11 @@ const useLocalStorage = <T,>(key: string, initialValue: T) => {
 };
 
 export const StoreProvider = ({ children }: { children: ReactNode }) => {
-  const [projects, setProjects] = useLocalStorage<Project[]>('projects', initialProjects);
-  const [tasks, setTasks] = useLocalStorage<Task[]>('tasks', initialTasks);
+  const [projects, setProjects] = useState<Project[]>([]);
+  const [tasks, setTasks] = useState<Task[]>([]);
   const [participants, setParticipants] = useLocalStorage<Participant[]>('participants', initialParticipants);
   const [roles, setRoles] = useLocalStorage<Role[]>('roles', initialRoles);
-  const [clients, setClients] = useLocalStorage<Client[]>('clients', initialClients);
+  const [clients, setClients] = useState<Client[]>([]);
   const [leads, setLeads] = useLocalStorage<Lead[]>('leads', initialLeads);
   const [currentUser, setCurrentUser] = useLocalStorage<Participant | null>('currentUser', null);
   const [companyInfo, setCompanyInfo] = useLocalStorage<CompanyInfo | null>('companyInfo', initialCompanyInfo);
@@ -84,7 +81,37 @@ export const StoreProvider = ({ children }: { children: ReactNode }) => {
   const [isLoaded, setIsLoaded] = useState(false);
 
   useEffect(() => {
-    setIsLoaded(true);
+    const fetchProjects = async () => {
+      try {
+        const response = await fetch('/api/projects');
+        if (response.ok) {
+          const data = await response.json();
+          setProjects(data);
+        } else {
+          console.error('Failed to fetch projects');
+        }
+      } catch (error) {
+        console.error('Error fetching projects:', error);
+      }
+    };
+
+    const fetchClients = async () => {
+        try {
+            const response = await fetch('/api/clients');
+            if(response.ok) {
+                const data = await response.json();
+                setClients(data);
+            } else {
+                console.error('Failed to fetch clients');
+            }
+        } catch (error) {
+            console.error('Error fetching clients:', error);
+        }
+    }
+
+    Promise.all([fetchProjects(), fetchClients()]).then(() => {
+        setIsLoaded(true);
+    });
   }, []);
 
   const store: Store = useMemo(() => ({
@@ -158,47 +185,70 @@ export const useStore = () => {
     [store.projects]
   );
 
-  const getProjectTasks = useCallback(
-    (projectId: string) => {
-      return store.tasks.filter((task) => task.projectId === projectId);
-    },
-    [store.tasks]
-  );
-  
-  const addProject = useCallback((project: Omit<Project, 'id' | 'participantIds'>, templateId?: string) => {
-    const newProject: Project = {
-      id: `proj-${Date.now()}`,
-      ...project,
-      participantIds: [],
-    };
-
-    let newTasks: Task[] = [];
-    if (templateId && templateId !== 'none') {
-      const template = store.projectTemplates.find(t => t.id === templateId);
-      if (template) {
-        newTasks = template.tasks.map((templateTask: TemplateTask) => {
-          const dueDate = addDays(new Date(newProject.startDate), templateTask.dueDayOffset);
-          return {
-            id: `task-${Date.now()}-${Math.random()}`,
-            projectId: newProject.id,
-            title: templateTask.title,
-            description: templateTask.description,
-            status: 'A Fazer',
-            priority: templateTask.priority,
-            dueDate: format(dueDate, 'yyyy-MM-dd'),
-            comments: [],
-            attachments: [],
-            checklist: [],
-          };
-        });
+  const getProjectTasks = useCallback(async (projectId: string) => {
+    try {
+      const response = await fetch(`/api/projects/${projectId}/tasks`);
+      if (!response.ok) {
+        throw new Error('Failed to fetch tasks');
       }
+      const tasks = await response.json();
+      // Update local state with fetched tasks
+      dispatch({ tasks: [...store.tasks.filter(t => t.projectId !== projectId), ...tasks] });
+      return tasks;
+    } catch (error) {
+      console.error(`Error fetching tasks for project ${projectId}:`, error);
+      return [];
     }
-    
-    dispatch({ 
-      projects: [...store.projects, newProject],
-      tasks: [...store.tasks, ...newTasks] 
-    });
-    return newProject;
+  }, [store.tasks, dispatch]);
+  
+  const addProject = useCallback(async (project: Omit<Project, 'id' | 'participantIds'>, templateId?: string) => {
+    try {
+      const response = await fetch('/api/projects', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify(project),
+      });
+
+      if (!response.ok) {
+        throw new Error('Failed to create project');
+      }
+
+      const newProject = await response.json();
+
+      let newTasks: Task[] = [];
+      if (templateId && templateId !== 'none') {
+        const template = store.projectTemplates.find(t => t.id === templateId);
+        if (template) {
+          // This part would also need to be moved to the backend in a real scenario
+          newTasks = template.tasks.map((templateTask: TemplateTask) => {
+            const dueDate = addDays(new Date(newProject.start_date), templateTask.dueDayOffset);
+            return {
+              id: `task-${Date.now()}-${Math.random()}`,
+              projectId: newProject.id,
+              title: templateTask.title,
+              description: templateTask.description,
+              status: 'A Fazer',
+              priority: templateTask.priority,
+              dueDate: format(dueDate, 'yyyy-MM-dd'),
+              comments: [],
+              attachments: [],
+              checklist: [],
+            };
+          });
+        }
+      }
+
+      dispatch({
+        projects: [...store.projects, newProject],
+        tasks: [...store.tasks, ...newTasks]
+      });
+      return newProject;
+    } catch (error) {
+      console.error('Error creating project:', error);
+      return null;
+    }
   }, [store.projects, store.tasks, store.projectTemplates, dispatch]);
 
   const updateProject = useCallback((updatedProject: Project) => {
@@ -214,28 +264,62 @@ export const useStore = () => {
     });
   }, [store.projects, store.tasks, dispatch]);
 
-  const addTask = useCallback((task: Omit<Task, 'id' | 'comments' | 'attachments' | 'checklist'>) => {
-    const newTask: Task = {
-      id: `task-${Date.now()}`,
-      ...task,
-      comments: [],
-      attachments: [],
-      checklist: [],
-    };
-    dispatch({ tasks: [...store.tasks, newTask] });
-    return newTask;
+  const addTask = useCallback(async (task: Omit<Task, 'id' | 'comments' | 'attachments' | 'checklist'>) => {
+    try {
+      const response = await fetch('/api/tasks', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify(task),
+      });
+      if (!response.ok) {
+        throw new Error('Failed to create task');
+      }
+      const newTask = await response.json();
+      dispatch({ tasks: [...store.tasks, newTask] });
+      return newTask;
+    } catch (error) {
+      console.error('Error creating task:', error);
+      return null;
+    }
   }, [store.tasks, dispatch]);
 
-  const updateTask = useCallback((updatedTask: Task) => {
-    dispatch({
-      tasks: store.tasks.map(t => t.id === updatedTask.id ? updatedTask : t)
-    });
+  const updateTask = useCallback(async (updatedTask: Task) => {
+    try {
+      const response = await fetch(`/api/tasks/${updatedTask.id}`, {
+        method: 'PUT',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify(updatedTask),
+      });
+      if (!response.ok) {
+        throw new Error('Failed to update task');
+      }
+      const returnedTask = await response.json();
+      dispatch({
+        tasks: store.tasks.map(t => t.id === returnedTask.id ? returnedTask : t)
+      });
+    } catch (error) {
+      console.error('Error updating task:', error);
+    }
   }, [store.tasks, dispatch]);
   
-  const deleteTask = useCallback((taskId: string) => {
-    dispatch({
-        tasks: store.tasks.filter(t => t.id !== taskId)
-    });
+  const deleteTask = useCallback(async (taskId: string) => {
+    try {
+      const response = await fetch(`/api/tasks/${taskId}`, {
+        method: 'DELETE',
+      });
+      if (!response.ok) {
+        throw new Error('Failed to delete task');
+      }
+      dispatch({
+          tasks: store.tasks.filter(t => t.id !== taskId)
+      });
+    } catch (error) {
+      console.error('Error deleting task:', error);
+    }
   }, [store.tasks, dispatch]);
   
   const getParticipant = useCallback((participantId: string) => {
@@ -296,26 +380,65 @@ export const useStore = () => {
     return store.clients.find(c => c.id === clientId);
   }, [store.clients]);
 
-  const addClient = useCallback((client: Omit<Client, 'id' | 'avatar'>) => {
-    const newClient: Client = {
-      id: `client-${Date.now()}`,
-      ...client,
-      avatar: `/avatars/c0${(store.clients.length % 3) + 1}.png`,
-    };
-    dispatch({ clients: [...store.clients, newClient]});
-    return newClient;
+  const addClient = useCallback(async (client: Omit<Client, 'id' | 'avatar'>) => {
+    try {
+      const response = await fetch('/api/clients', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({
+          ...client,
+          avatar: `/avatars/c0${(store.clients.length % 3) + 1}.png`,
+        }),
+      });
+      if (!response.ok) {
+        throw new Error('Failed to create client');
+      }
+      const newClient = await response.json();
+      dispatch({ clients: [...store.clients, newClient]});
+      return newClient;
+    } catch (error) {
+      console.error('Error creating client:', error);
+      return null;
+    }
   }, [store.clients, dispatch]);
 
-  const updateClient = useCallback((updatedClient: Client) => {
-    dispatch({
-      clients: store.clients.map(c => c.id === updatedClient.id ? updatedClient : c)
-    });
+  const updateClient = useCallback(async (updatedClient: Client) => {
+    try {
+      const response = await fetch(`/api/clients/${updatedClient.id}`, {
+        method: 'PUT',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify(updatedClient),
+      });
+      if (!response.ok) {
+        throw new Error('Failed to update client');
+      }
+      const returnedClient = await response.json();
+      dispatch({
+        clients: store.clients.map(c => c.id === returnedClient.id ? returnedClient : c)
+      });
+    } catch (error) {
+      console.error('Error updating client:', error);
+    }
   }, [store.clients, dispatch]);
 
-  const deleteClient = useCallback((clientId: string) => {
-    dispatch({
-      clients: store.clients.filter(c => c.id !== clientId)
-    });
+  const deleteClient = useCallback(async (clientId: string) => {
+    try {
+      const response = await fetch(`/api/clients/${clientId}`, {
+        method: 'DELETE',
+      });
+      if (!response.ok) {
+        throw new Error('Failed to delete client');
+      }
+      dispatch({
+        clients: store.clients.filter(c => c.id !== clientId)
+      });
+    } catch (error) {
+      console.error('Error deleting client:', error);
+    }
   }, [store.clients, dispatch]);
     
   const getLead = useCallback((leadId: string) => {
@@ -349,22 +472,38 @@ export const useStore = () => {
     dispatch({ companyInfo: info });
   }, [dispatch]);
 
-  const duplicateProject = useCallback((projectToDuplicate: Project) => {
-    const newProject: Project = {
+  const duplicateProject = useCallback(async (projectToDuplicate: Project) => {
+    const newProjectData = {
       ...projectToDuplicate,
-      id: `proj-${Date.now()}`,
       name: `${projectToDuplicate.name} (Cópia)`,
     };
-    const originalTasks = getProjectTasks(projectToDuplicate.id);
-    const newTasks: Task[] = originalTasks.map(task => ({
-      ...task,
-      id: `task-${Date.now()}-${Math.random()}`,
-      projectId: newProject.id,
-    }));
+
+    // This should be a single API call to the backend to duplicate the project and its tasks
+    const response = await fetch('/api/projects', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(newProjectData),
+    });
+    const newProject = await response.json();
+
+    const originalTasks = await getProjectTasks(projectToDuplicate.id);
+    const newTasks: Promise<Response>[] = originalTasks.map((task: Task) => {
+      const newTaskData = {
+        ...task,
+        projectId: newProject.id,
+      };
+      return fetch('/api/tasks', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(newTaskData),
+      });
+    });
+
+    const createdTasks = await Promise.all(newTasks.map(p => p.then(res => res.json())));
 
     dispatch({ 
       projects: [...store.projects, newProject],
-      tasks: [...store.tasks, ...newTasks] 
+      tasks: [...store.tasks, ...createdTasks]
     });
     return newProject;
   }, [store.projects, store.tasks, getProjectTasks, dispatch]);

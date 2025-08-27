@@ -8,8 +8,8 @@ import { useStore } from '@/hooks/use-store';
 import { Progress } from '@/components/ui/progress';
 import { PlusCircle, Briefcase, Edit, ClipboardList, LayoutGrid, List, ChevronsRight } from 'lucide-react';
 import { LeadDetailsSheet } from '../leads/lead-details-sheet';
-import { useState } from 'react';
-import type { Lead } from '@/lib/types';
+import { useState, useEffect } from 'react';
+import type { Lead, Task } from '@/lib/types';
 import Link from 'next/link';
 
 
@@ -22,12 +22,16 @@ interface ProjectHeaderProps {
 
 export function ProjectHeader({ project, viewMode, setViewMode }: ProjectHeaderProps) {
   const { getProjectTasks, getClient, getLead, workspaces } = useStore();
-  const tasks = getProjectTasks(project.id);
+  const [tasks, setTasks] = useState<Task[]>([]);
   const client = project.clientId ? getClient(project.clientId) : null;
   const lead = project.leadId ? getLead(project.leadId) : null;
   const workspace = workspaces.find(w => w.id === project.workspaceId);
   
   const [isLeadSheetOpen, setIsLeadSheetOpen] = useState(false);
+
+  useEffect(() => {
+    getProjectTasks(project.id).then(setTasks);
+  }, [getProjectTasks, project.id]);
 
   const completedTasks = tasks.filter((task) => task.status === 'Concluída').length;
   const progress = tasks.length > 0 ? (completedTasks / tasks.length) * 100 : 0;

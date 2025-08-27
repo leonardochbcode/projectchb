@@ -45,7 +45,7 @@ function ConvertToProjectDialog({
     const [workspaceId, setWorkspaceId] = useState<string | undefined>(workspaces[0]?.id);
     const existingClient = lead.clientId ? getClient(lead.clientId) : null;
 
-    const handleConvert = () => {
+    const handleConvert = async () => {
         if (!workspaceId) {
             toast({
                 variant: 'destructive',
@@ -61,16 +61,24 @@ function ConvertToProjectDialog({
 
         let finalClientId = lead.clientId;
         if (!finalClientId) {
-            const newClient = addClient({
+            const newClient = await addClient({
                 name: lead.company || lead.name,
                 email: lead.email,
                 company: lead.company,
                 phone: lead.phone,
             });
+            if (!newClient) {
+                toast({
+                    variant: 'destructive',
+                    title: 'Erro',
+                    description: 'Não foi possível criar o cliente.',
+                });
+                return;
+            }
             finalClientId = newClient.id;
         }
         
-        const newProject = addProject({
+        const newProject = await addProject({
             name: `Projeto: ${lead.name}`,
             description: lead.description,
             clientId: finalClientId,
@@ -81,13 +89,20 @@ function ConvertToProjectDialog({
             workspaceId: workspaceId,
         });
 
-        toast({
-            title: 'Proposta Convertida!',
-            description: `O projeto "${newProject.name}" foi criado com sucesso.`,
-        });
-
-        onOpenChange(false);
-        router.push(`/projects/${newProject.id}`);
+        if (newProject) {
+            toast({
+                title: 'Proposta Convertida!',
+                description: `O projeto "${newProject.name}" foi criado com sucesso.`,
+            });
+            onOpenChange(false);
+            router.push(`/projects/${newProject.id}`);
+        } else {
+            toast({
+                variant: 'destructive',
+                title: 'Erro',
+                description: 'Não foi possível criar o projeto.',
+            });
+        }
     };
 
     return (

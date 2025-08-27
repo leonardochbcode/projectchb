@@ -13,8 +13,9 @@ import { Progress } from '@/components/ui/progress';
 import { Badge } from '@/components/ui/badge';
 import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar';
 import { useStore } from '@/hooks/use-store';
-import type { Project } from '@/lib/types';
+import type { Project, Task } from '@/lib/types';
 import { cn } from '@/lib/utils';
+import { useEffect, useState } from 'react';
 import {
   Tooltip,
   TooltipContent,
@@ -28,7 +29,12 @@ interface ProjectCardProps {
 
 export function ProjectCard({ project }: ProjectCardProps) {
   const { getProjectTasks, participants } = useStore();
-  const tasks = getProjectTasks(project.id);
+  const [tasks, setTasks] = useState<Task[]>([]);
+
+  useEffect(() => {
+    getProjectTasks(project.id).then(setTasks);
+  }, [getProjectTasks, project.id]);
+
   const completedTasks = tasks.filter((task) => task.status === 'Concluída').length;
   const progress = tasks.length > 0 ? (completedTasks / tasks.length) * 100 : 0;
 
