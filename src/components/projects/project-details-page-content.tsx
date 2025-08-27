@@ -7,10 +7,13 @@ import { notFound } from 'next/navigation';
 import { Skeleton } from '@/components/ui/skeleton';
 import { TasksTable } from '@/components/projects/tasks-table';
 import { useState, useEffect } from 'react';
+import type { Task } from '@/lib/types';
 
 // Este componente agora recebe `projectId` como uma prop simples.
 export function ProjectDetailsPageContent({ projectId }: { projectId: string }) {
   const { isLoaded, projects, getProjectTasks } = useStore();
+  const [tasks, setTasks] = useState<Task[]>([]);
+  const [tasksLoaded, setTasksLoaded] = useState(false);
   const [viewMode, setViewMode] = useState<'kanban' | 'list'>(() => {
     if (typeof window !== 'undefined') {
       const savedMode = localStorage.getItem('projectTasksViewMode');
@@ -25,7 +28,18 @@ export function ProjectDetailsPageContent({ projectId }: { projectId: string }) 
     }
   }, [viewMode]);
 
-  if (!isLoaded) {
+  useEffect(() => {
+    if (isLoaded) {
+      getProjectTasks(projectId).then(fetchedTasks => {
+        setTasks(fetchedTasks);
+        setTasksLoaded(true);
+      });
+    }
+  }, [isLoaded, projectId, getProjectTasks]);
+
+  const project = projects.find((p) => p.id === projectId);
+
+  if (!isLoaded || !project) {
     return (
       <div className="flex flex-col h-full">
         <div className="p-4 sm:p-6 border-b">
@@ -59,13 +73,19 @@ export function ProjectDetailsPageContent({ projectId }: { projectId: string }) 
     );
   }
 
-  const project = projects.find((p) => p.id === projectId);
-
   if (!project) {
     return notFound();
   }
 
-  const tasks = getProjectTasks(project.id);
+  if (!tasksLoaded) {
+    // You can show a more specific loading state for tasks if you want
+    return (
+       <div className="flex flex-col h-full">
+        <ProjectHeader project={project} viewMode={viewMode} setViewMode={setViewMode} />
+        <div className="p-4"><Skeleton className="h-96 w-full" /></div>
+      </div>
+    )
+  }
 
   return (
     <div className="flex flex-col h-full">

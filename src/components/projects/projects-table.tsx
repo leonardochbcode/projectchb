@@ -36,8 +36,20 @@ const taskPriorityColors: { [key: string]: string } = {
 };
 
 
-function ProjectTasksRow({ project, tasks, isVisible }: { project: Project, tasks: Task[], isVisible: boolean }) {
-    const { getParticipant } = useStore();
+function ProjectTasksRow({ project, isVisible }: { project: Project, isVisible: boolean }) {
+    const { getParticipant, getProjectTasks } = useStore();
+    const [tasks, setTasks] = useState<Task[]>([]);
+    const [isLoading, setIsLoading] = useState(false);
+
+    React.useEffect(() => {
+        if (isVisible && tasks.length === 0) {
+            setIsLoading(true);
+            getProjectTasks(project.id).then(fetchedTasks => {
+                setTasks(fetchedTasks);
+                setIsLoading(false);
+            });
+        }
+    }, [isVisible, project.id, getProjectTasks, tasks.length]);
     
     if (!isVisible) return null;
 
@@ -46,7 +58,7 @@ function ProjectTasksRow({ project, tasks, isVisible }: { project: Project, task
             <TableCell colSpan={6} className="p-0">
                 <div className="p-4">
                     <h4 className="text-sm font-semibold mb-2">Tarefas do Projeto: {project.name}</h4>
-                    {tasks.length > 0 ? (
+                    {isLoading ? <p>Carregando tarefas...</p> : tasks.length > 0 ? (
                         <Table>
                             <TableHeader>
                                 <TableRow>
@@ -92,7 +104,7 @@ function ProjectTasksRow({ project, tasks, isVisible }: { project: Project, task
 }
 
 export function ProjectsTable({ projects, onEdit }: ProjectsTableProps) {
-  const { duplicateProject, getProjectTasks, getParticipant } = useStore();
+  const { duplicateProject, getParticipant } = useStore();
   const [expandedRows, setExpandedRows] = useState<Record<string, boolean>>({});
 
   const handleDuplicate = (project: Project) => {
@@ -118,7 +130,6 @@ export function ProjectsTable({ projects, onEdit }: ProjectsTableProps) {
       </TableHeader>
       <TableBody>
         {projects.map((project) => {
-          const tasks = getProjectTasks(project.id);
           const pmo = project.pmoId ? getParticipant(project.pmoId) : null;
           const isExpanded = expandedRows[project.id];
           return (
@@ -173,7 +184,7 @@ export function ProjectsTable({ projects, onEdit }: ProjectsTableProps) {
                     </DropdownMenu>
                     </TableCell>
                 </TableRow>
-                <ProjectTasksRow project={project} tasks={tasks} isVisible={isExpanded} />
+                <ProjectTasksRow project={project} isVisible={isExpanded} />
             </React.Fragment>
           )
         })}
