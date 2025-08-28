@@ -107,9 +107,11 @@ export function ProjectsTable({ projects, onEdit }: ProjectsTableProps) {
   const { duplicateProject, getParticipant } = useStore();
   const [expandedRows, setExpandedRows] = useState<Record<string, boolean>>({});
 
-  const handleDuplicate = (project: Project) => {
-    const newProject = duplicateProject(project);
-    onEdit(newProject);
+  const handleDuplicate = async (project: Project) => {
+    const newProject = await duplicateProject(project);
+    if (newProject) {
+      onEdit(newProject);
+    }
   };
 
   const toggleRow = (projectId: string) => {
