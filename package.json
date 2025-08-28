@@ -10,6 +10,7 @@
     "start": "next start",
     "lint": "next lint",
     "db:seed": "tsx scripts/seed.ts",
+    "test:api": "tsx scripts/test-api.ts",
     "typecheck": "tsc --noEmit"
   },
   "dependencies": {

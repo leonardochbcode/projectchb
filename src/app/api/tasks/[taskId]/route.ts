@@ -4,9 +4,9 @@ import { Task } from '@/lib/types';
 
 export async function PUT(
   request: Request,
-  { params }: { params: { id: string } }
+  { params }: { params: { taskId: string } }
 ) {
-  const taskId = params.id;
+  const { taskId } = params;
   try {
     const { title, description, status, priority, dueDate, assigneeId }: Partial<Task> = await request.json();
 
@@ -45,9 +45,9 @@ export async function PUT(
 
 export async function DELETE(
   request: Request,
-  { params }: { params: { id: string } }
+  { params }: { params: { taskId: string } }
 ) {
-  const taskId = params.id;
+  const { taskId } = params;
   try {
     const client = await pool.connect();
     await client.query('DELETE FROM tasks WHERE id = $1', [taskId]);
