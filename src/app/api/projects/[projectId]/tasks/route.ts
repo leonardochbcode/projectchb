@@ -3,9 +3,9 @@ import pool from '@/lib/db';
 
 export async function GET(
   request: Request,
-  { params }: { params: { id: string } }
+  { params }: { params: { projectId: string } }
 ) {
-  const projectId = params.id;
+  const { projectId } = params;
 
   try {
     const client = await pool.connect();

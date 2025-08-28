@@ -12,8 +12,6 @@ import {
 import React from 'react';
 import type { Project, Task, Participant, Role, Client, Lead, CompanyInfo, ProjectTemplate, TemplateTask, ChecklistItem, Workspace } from '@/lib/types';
 import {
-  initialParticipants,
-  initialRoles,
   initialLeads,
   initialCompanyInfo,
   initialProjectTemplates,
@@ -70,8 +68,8 @@ const useLocalStorage = <T,>(key: string, initialValue: T) => {
 export const StoreProvider = ({ children }: { children: ReactNode }) => {
   const [projects, setProjects] = useState<Project[]>([]);
   const [tasks, setTasks] = useState<Task[]>([]);
-  const [participants, setParticipants] = useLocalStorage<Participant[]>('participants', initialParticipants);
-  const [roles, setRoles] = useLocalStorage<Role[]>('roles', initialRoles);
+  const [participants, setParticipants] = useState<Participant[]>([]);
+  const [roles, setRoles] = useState<Role[]>([]);
   const [clients, setClients] = useState<Client[]>([]);
   const [leads, setLeads] = useLocalStorage<Lead[]>('leads', initialLeads);
   const [currentUser, setCurrentUser] = useLocalStorage<Participant | null>('currentUser', null);
@@ -109,7 +107,35 @@ export const StoreProvider = ({ children }: { children: ReactNode }) => {
         }
     }
 
-    Promise.all([fetchProjects(), fetchClients()]).then(() => {
+    const fetchParticipants = async () => {
+        try {
+            const response = await fetch('/api/participants');
+            if(response.ok) {
+                const data = await response.json();
+                setParticipants(data);
+            } else {
+                console.error('Failed to fetch participants');
+            }
+        } catch (error) {
+            console.error('Error fetching participants:', error);
+        }
+    }
+
+    const fetchRoles = async () => {
+        try {
+            const response = await fetch('/api/roles');
+            if(response.ok) {
+                const data = await response.json();
+                setRoles(data);
+            } else {
+                console.error('Failed to fetch roles');
+            }
+        } catch (error) {
+            console.error('Error fetching roles:', error);
+        }
+    }
+
+    Promise.all([fetchProjects(), fetchClients(), fetchParticipants(), fetchRoles()]).then(() => {
         setIsLoaded(true);
     });
   }, []);
@@ -326,54 +352,132 @@ export const useStore = () => {
       return store.participants.find(p => p.id === participantId);
   }, [store.participants]);
 
-  const addParticipant = useCallback((participant: Omit<Participant, 'id' | 'avatar'>) => {
-    const newParticipant: Participant = {
-      id: `user-${Date.now()}`,
-      ...participant,
-      avatar: `/avatars/0${(store.participants.length % 5) + 1}.png`,
-    };
-    dispatch({ participants: [...store.participants, newParticipant]});
+  const addParticipant = useCallback(async (participant: Omit<Participant, 'id' | 'avatar'>) => {
+    try {
+      const response = await fetch('/api/participants', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({
+          ...participant,
+          avatar: `/avatars/0${(store.participants.length % 5) + 1}.png`,
+        }),
+      });
+      if (!response.ok) {
+        throw new Error('Failed to create participant');
+      }
+      const newParticipant = await response.json();
+      dispatch({ participants: [...store.participants, newParticipant]});
+      return newParticipant;
+    } catch (error) {
+      console.error('Error creating participant:', error);
+      return null;
+    }
   }, [store.participants, dispatch]);
 
-  const updateParticipant = useCallback((updatedParticipant: Participant) => {
-    dispatch({
-      participants: store.participants.map(p => p.id === updatedParticipant.id ? updatedParticipant : p)
-    });
+  const updateParticipant = useCallback(async (updatedParticipant: Participant) => {
+    try {
+      const response = await fetch(`/api/participants/${updatedParticipant.id}`, {
+        method: 'PUT',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify(updatedParticipant),
+      });
+      if (!response.ok) {
+        throw new Error('Failed to update participant');
+      }
+      const returnedParticipant = await response.json();
+      dispatch({
+        participants: store.participants.map(p => p.id === returnedParticipant.id ? returnedParticipant : p)
+      });
+    } catch (error) {
+      console.error('Error updating participant:', error);
+    }
   }, [store.participants, dispatch]);
 
-  const deleteParticipant = useCallback((participantId: string) => {
-    dispatch({
-      participants: store.participants.filter(p => p.id !== participantId)
-    });
+  const deleteParticipant = useCallback(async (participantId: string) => {
+    try {
+      const response = await fetch(`/api/participants/${participantId}`, {
+        method: 'DELETE',
+      });
+      if (!response.ok) {
+        throw new Error('Failed to delete participant');
+      }
+      dispatch({
+        participants: store.participants.filter(p => p.id !== participantId)
+      });
+    } catch (error) {
+      console.error('Error deleting participant:', error);
+    }
   }, [store.participants, dispatch]);
 
   const getRole = useCallback((roleId: string) => {
     return store.roles.find(r => r.id === roleId);
   }, [store.roles]);
 
-  const addRole = useCallback((role: Omit<Role, 'id'>) => {
-    const newRole: Role = {
-      id: `role-${Date.now()}`,
-      ...role,
-    };
-    dispatch({ roles: [...store.roles, newRole]});
+  const addRole = useCallback(async (role: Omit<Role, 'id'>) => {
+    try {
+      const response = await fetch('/api/roles', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify(role),
+      });
+      if (!response.ok) {
+        throw new Error('Failed to create role');
+      }
+      const newRole = await response.json();
+      dispatch({ roles: [...store.roles, newRole]});
+      return newRole;
+    } catch (error) {
+      console.error('Error creating role:', error);
+      return null;
+    }
   }, [store.roles, dispatch]);
 
-  const updateRole = useCallback((updatedRole: Role) => {
-    dispatch({
-      roles: store.roles.map(r => r.id === updatedRole.id ? updatedRole : r)
-    });
+  const updateRole = useCallback(async (updatedRole: Role) => {
+    try {
+      const response = await fetch(`/api/roles/${updatedRole.id}`, {
+        method: 'PUT',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify(updatedRole),
+      });
+      if (!response.ok) {
+        throw new Error('Failed to update role');
+      }
+      const returnedRole = await response.json();
+      dispatch({
+        roles: store.roles.map(r => r.id === returnedRole.id ? returnedRole : r)
+      });
+    } catch (error) {
+      console.error('Error updating role:', error);
+    }
   }, [store.roles, dispatch]);
   
-  const deleteRole = useCallback((roleId: string) => {
+  const deleteRole = useCallback(async (roleId: string) => {
     const isRoleInUse = store.participants.some(p => p.roleId === roleId);
     if(isRoleInUse) {
         alert("Esta função está em uso e não pode ser excluída.");
         return;
     }
-    dispatch({
-        roles: store.roles.filter(r => r.id !== roleId)
-    });
+    try {
+      const response = await fetch(`/api/roles/${roleId}`, {
+        method: 'DELETE',
+      });
+      if (!response.ok) {
+        throw new Error('Failed to delete role');
+      }
+      dispatch({
+          roles: store.roles.filter(r => r.id !== roleId)
+      });
+    } catch (error) {
+      console.error('Error deleting role:', error);
+    }
   }, [store.roles, store.participants, dispatch]);
 
   const getClient = useCallback((clientId: string) => {
