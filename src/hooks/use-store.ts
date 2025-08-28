@@ -14,7 +14,6 @@ import type { Project, Task, Participant, Role, Client, Lead, CompanyInfo, Proje
 import {
   initialCompanyInfo,
   initialProjectTemplates,
-  initialWorkspaces,
 } from '@/lib/data';
 import { format, addDays } from 'date-fns';
 
@@ -74,7 +73,7 @@ export const StoreProvider = ({ children }: { children: ReactNode }) => {
   const [currentUser, setCurrentUser] = useLocalStorage<Participant | null>('currentUser', null);
   const [companyInfo, setCompanyInfo] = useLocalStorage<CompanyInfo | null>('companyInfo', initialCompanyInfo);
   const [projectTemplates, setProjectTemplates] = useLocalStorage<ProjectTemplate[]>('projectTemplates', initialProjectTemplates);
-  const [workspaces, setWorkspaces] = useLocalStorage<Workspace[]>('workspaces', initialWorkspaces);
+  const [workspaces, setWorkspaces] = useState<Workspace[]>([]);
   const [isLoaded, setIsLoaded] = useState(false);
 
   useEffect(() => {
@@ -148,7 +147,21 @@ export const StoreProvider = ({ children }: { children: ReactNode }) => {
         }
     }
 
-    Promise.all([fetchProjects(), fetchClients(), fetchParticipants(), fetchRoles(), fetchLeads()]).then(() => {
+    const fetchWorkspaces = async () => {
+        try {
+            const response = await fetch('/api/workspaces');
+            if(response.ok) {
+                const data = await response.json();
+                setWorkspaces(data);
+            } else {
+                console.error('Failed to fetch workspaces');
+            }
+        } catch (error) {
+            console.error('Error fetching workspaces:', error);
+        }
+    }
+
+    Promise.all([fetchProjects(), fetchClients(), fetchParticipants(), fetchRoles(), fetchLeads(), fetchWorkspaces()]).then(() => {
         setIsLoaded(true);
     });
   }, []);
@@ -231,14 +244,12 @@ export const useStore = () => {
         throw new Error('Failed to fetch tasks');
       }
       const tasks = await response.json();
-      // Update local state with fetched tasks
-      dispatch({ tasks: [...store.tasks.filter(t => t.projectId !== projectId), ...tasks] });
       return tasks;
     } catch (error) {
       console.error(`Error fetching tasks for project ${projectId}:`, error);
       return [];
     }
-  }, [store.tasks, dispatch]);
+  }, []);
   
   const addProject = useCallback(async (project: Omit<Project, 'id' | 'participantIds'>, templateId?: string) => {
     try {
@@ -583,16 +594,41 @@ export const useStore = () => {
     }
   }, [store.leads, dispatch]);
 
-  const updateLead = useCallback((updatedLead: Lead) => {
-      dispatch({
-          leads: store.leads.map(l => l.id === updatedLead.id ? updatedLead : l)
+  const updateLead = useCallback(async (updatedLead: Lead) => {
+    try {
+      const response = await fetch(`/api/leads/${updatedLead.id}`, {
+        method: 'PUT',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify(updatedLead),
       });
+      if (!response.ok) {
+        throw new Error('Failed to update lead');
+      }
+      const returnedLead = await response.json();
+      dispatch({
+        leads: store.leads.map(l => l.id === returnedLead.id ? returnedLead : l)
+      });
+    } catch (error) {
+      console.error('Error updating lead:', error);
+    }
   }, [store.leads, dispatch]);
 
-  const deleteLead = useCallback((leadId: string) => {
+  const deleteLead = useCallback(async (leadId: string) => {
+    try {
+      const response = await fetch(`/api/leads/${leadId}`, {
+        method: 'DELETE',
+      });
+      if (!response.ok) {
+        throw new Error('Failed to delete lead');
+      }
       dispatch({
           leads: store.leads.filter(l => l.id !== leadId)
       });
+    } catch (error) {
+      console.error('Error deleting lead:', error);
+    }
   }, [store.leads, dispatch]);
 
   const updateCompanyInfo = useCallback((info: CompanyInfo) => {
@@ -655,29 +691,67 @@ export const useStore = () => {
     });
   }, [store.projectTemplates, dispatch]);
   
-  const addWorkspace = useCallback((workspace: Omit<Workspace, 'id'>) => {
-    const newWorkspace: Workspace = {
-      id: `ws-${Date.now()}`,
-      ...workspace,
-    };
-    dispatch({ workspaces: [...store.workspaces, newWorkspace] });
+  const addWorkspace = useCallback(async (workspace: Omit<Workspace, 'id'>) => {
+    try {
+      const response = await fetch('/api/workspaces', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify(workspace),
+      });
+      if (!response.ok) {
+        throw new Error('Failed to create workspace');
+      }
+      const newWorkspace = await response.json();
+      dispatch({ workspaces: [...store.workspaces, newWorkspace] });
+      return newWorkspace;
+    } catch (error) {
+      console.error('Error creating workspace:', error);
+      return null;
+    }
   }, [store.workspaces, dispatch]);
 
-  const updateWorkspace = useCallback((updatedWorkspace: Workspace) => {
-    dispatch({
-      workspaces: store.workspaces.map(w => w.id === updatedWorkspace.id ? updatedWorkspace : w)
-    });
+  const updateWorkspace = useCallback(async (updatedWorkspace: Workspace) => {
+    try {
+      const response = await fetch(`/api/workspaces/${updatedWorkspace.id}`, {
+        method: 'PUT',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify(updatedWorkspace),
+      });
+      if (!response.ok) {
+        throw new Error('Failed to update workspace');
+      }
+      const returnedWorkspace = await response.json();
+      dispatch({
+        workspaces: store.workspaces.map(w => w.id === returnedWorkspace.id ? returnedWorkspace : w)
+      });
+    } catch (error) {
+      console.error('Error updating workspace:', error);
+    }
   }, [store.workspaces, dispatch]);
 
-  const deleteWorkspace = useCallback((workspaceId: string) => {
+  const deleteWorkspace = useCallback(async (workspaceId: string) => {
     const projectsInWorkspace = store.projects.filter(p => p.workspaceId === workspaceId);
     if (projectsInWorkspace.length > 0) {
       alert("Não é possível excluir um espaço de trabalho que contém projetos.");
       return;
     }
-    dispatch({
-      workspaces: store.workspaces.filter(w => w.id !== workspaceId)
-    });
+    try {
+      const response = await fetch(`/api/workspaces/${workspaceId}`, {
+        method: 'DELETE',
+      });
+      if (!response.ok) {
+        throw new Error('Failed to delete workspace');
+      }
+      dispatch({
+        workspaces: store.workspaces.filter(w => w.id !== workspaceId)
+      });
+    } catch (error) {
+      console.error('Error deleting workspace:', error);
+    }
   }, [store.workspaces, store.projects, dispatch]);
 
 
