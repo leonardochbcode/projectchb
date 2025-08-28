@@ -4,9 +4,9 @@ import { Client } from '@/lib/types';
 
 export async function PUT(
   request: Request,
-  { params }: { params: { clientId: string } }
+  { params }: { params: Promise<{ clientId: string }> }
 ) {
-  const { clientId } = params;
+  const { clientId } = await params;
   try {
     const { name, email, phone, company, avatar, cnpj, address, suportewebCode }: Partial<Client> = await request.json();
 
@@ -43,9 +43,9 @@ export async function PUT(
 
 export async function DELETE(
   request: Request,
-  { params }: { params: { clientId: string } }
+  { params }: { params: Promise<{ clientId: string }> }
 ) {
-  const { clientId } = params;
+  const { clientId } = await params;
   try {
     const dbClient = await pool.connect();
     await dbClient.query('DELETE FROM clients WHERE id = $1', [clientId]);

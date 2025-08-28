@@ -4,9 +4,9 @@ import { Participant } from '@/lib/types';
 
 export async function PUT(
   request: Request,
-  { params }: { params: { participantId: string } }
+  { params }: { params: Promise<{ participantId: string }> }
 ) {
-  const { participantId } = params;
+  const { participantId } = await params;
   try {
     const { name, email, roleId, avatar }: Partial<Participant> = await request.json();
 
@@ -39,9 +39,9 @@ export async function PUT(
 
 export async function DELETE(
   request: Request,
-  { params }: { params: { participantId: string } }
+  { params }: { params: Promise<{ participantId: string }> }
 ) {
-  const { participantId } = params;
+  const { participantId } = await params;
   try {
     const dbClient = await pool.connect();
     await dbClient.query('DELETE FROM participants WHERE id = $1', [participantId]);
