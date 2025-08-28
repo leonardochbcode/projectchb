@@ -12,7 +12,6 @@ import {
 import React from 'react';
 import type { Project, Task, Participant, Role, Client, Lead, CompanyInfo, ProjectTemplate, TemplateTask, ChecklistItem, Workspace } from '@/lib/types';
 import {
-  initialLeads,
   initialCompanyInfo,
   initialProjectTemplates,
   initialWorkspaces,
@@ -71,7 +70,7 @@ export const StoreProvider = ({ children }: { children: ReactNode }) => {
   const [participants, setParticipants] = useState<Participant[]>([]);
   const [roles, setRoles] = useState<Role[]>([]);
   const [clients, setClients] = useState<Client[]>([]);
-  const [leads, setLeads] = useLocalStorage<Lead[]>('leads', initialLeads);
+  const [leads, setLeads] = useState<Lead[]>([]);
   const [currentUser, setCurrentUser] = useLocalStorage<Participant | null>('currentUser', null);
   const [companyInfo, setCompanyInfo] = useLocalStorage<CompanyInfo | null>('companyInfo', initialCompanyInfo);
   const [projectTemplates, setProjectTemplates] = useLocalStorage<ProjectTemplate[]>('projectTemplates', initialProjectTemplates);
@@ -135,7 +134,21 @@ export const StoreProvider = ({ children }: { children: ReactNode }) => {
         }
     }
 
-    Promise.all([fetchProjects(), fetchClients(), fetchParticipants(), fetchRoles()]).then(() => {
+    const fetchLeads = async () => {
+        try {
+            const response = await fetch('/api/leads');
+            if(response.ok) {
+                const data = await response.json();
+                setLeads(data);
+            } else {
+                console.error('Failed to fetch leads');
+            }
+        } catch (error) {
+            console.error('Error fetching leads:', error);
+        }
+    }
+
+    Promise.all([fetchProjects(), fetchClients(), fetchParticipants(), fetchRoles(), fetchLeads()]).then(() => {
         setIsLoaded(true);
     });
   }, []);
@@ -549,15 +562,25 @@ export const useStore = () => {
       return store.leads.find(l => l.id === leadId);
   }, [store.leads]);
 
-  const addLead = useCallback((lead: Omit<Lead, 'id' | 'createdAt' | 'comments' | 'attachments'>) => {
-      const newLead: Lead = {
-          id: `lead-${Date.now()}`,
-          createdAt: new Date().toISOString(),
-          ...lead,
-          comments: [],
-          attachments: [],
-      };
+  const addLead = useCallback(async (lead: Omit<Lead, 'id' | 'createdAt' | 'comments' | 'attachments'>) => {
+    try {
+      const response = await fetch('/api/leads', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify(lead),
+      });
+      if (!response.ok) {
+        throw new Error('Failed to create lead');
+      }
+      const newLead = await response.json();
       dispatch({ leads: [...store.leads, newLead]});
+      return newLead;
+    } catch (error) {
+      console.error('Error creating lead:', error);
+      return null;
+    }
   }, [store.leads, dispatch]);
 
   const updateLead = useCallback((updatedLead: Lead) => {
