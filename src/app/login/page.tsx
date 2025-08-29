@@ -16,10 +16,10 @@ export default function LoginPage() {
   const [password, setPassword] = useState('chb123');
   const [isLoading, setIsLoading] = useState(false);
 
-  const handleLogin = (e: React.FormEvent) => {
+  const handleLogin = async (e: React.FormEvent) => {
     e.preventDefault();
     setIsLoading(true);
-    const success = login(email, password);
+    const success = await login(email, password);
 
     if (success) {
       router.push('/');

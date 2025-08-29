@@ -74,7 +74,6 @@ export interface Participant {
   email: string;
   roleId: string;
   avatar: string;
-  password?: string;
 }
 
 export interface TaskComment {
