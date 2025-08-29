@@ -211,20 +211,28 @@ export const useStore = () => {
   const store = useStoreRaw();
   const { dispatch } = store;
 
-  const login = useCallback(
-    (email: string, password?: string) => {
-      const user = store.participants.find(
-        (p) => p.email.toLowerCase() === email.toLowerCase() && p.password === password
-      );
+  const login = useCallback(async (email: string, password?: string) => {
+    try {
+      const response = await fetch('/api/auth/login', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({ email, password }),
+      });
 
-      if (user) {
-        dispatch({ currentUser: user });
-        return true;
+      if (!response.ok) {
+        return false;
       }
+
+      const user = await response.json();
+      dispatch({ currentUser: user });
+      return true;
+    } catch (error) {
+      console.error('Login error:', error);
       return false;
-    },
-    [store.participants, dispatch]
-  );
+    }
+  }, [dispatch]);
 
   const logout = useCallback(() => {
     dispatch({ currentUser: null });
